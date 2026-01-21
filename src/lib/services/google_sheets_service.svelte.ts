@@ -17,7 +17,9 @@ export class GoogleSheetsService {
       this.spreadsheetId =
         localStorage.getItem("spreadsheetId") ||
         "1UW_dbtJEFJeOjCg323HJPaacqPIztw_9bGI5Rw6HRxQ";
-      this.worksheetTitle = localStorage.getItem("horasSheet") || "2026";
+      this.worksheetTitle =
+        localStorage.getItem("horasSheet") ||
+        new Date().getFullYear().toString();
       // Por defecto apuntamos a la URL configurada en constants.ts
       this.backendUrl =
         localStorage.getItem("backendUrl") || API_CONFIG.BASE_URL;
@@ -74,15 +76,15 @@ export class GoogleSheetsService {
       throw new Error("Backend URL no configurada.");
     }
 
-    const url = new URL(`${this.backendUrl}/get_horas.php`);
-    url.searchParams.append("spreadsheetId", this.spreadsheetId);
-    url.searchParams.append("worksheetTitle", this.worksheetTitle);
-
-    const response = await fetch(url.toString(), {
-      method: "GET",
+    const response = await fetch(`${this.backendUrl}/get_horas.php`, {
+      method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
+      body: JSON.stringify({
+        spreadsheetId: this.spreadsheetId,
+        worksheetTitle: this.worksheetTitle,
+      }),
     });
 
     if (!response.ok) {

@@ -16,7 +16,7 @@ const SERVICE_ACCOUNT_KEY_FILE = __DIR__ . '/assets/serviceaccount.json';
 // CORS y Cabeceras
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *'); 
-header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
+header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -25,9 +25,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 try {
-    // Obtener parámetros dinámicos de la query string o del cuerpo si es POST
-    $spreadsheetId = $_GET['spreadsheetId'] ?? '1UW_dbtJEFJeOjCg323HJPaacqPIztw_9bGI5Rw6HRxQ';
-    $worksheetTitle = $_GET['worksheetTitle'] ?? '2026';
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        throw new Exception('Método no permitido. Use POST.');
+    }
+
+    // Leer datos del payload JSON
+    $input = file_get_contents('php://input');
+    $data = json_decode($input, true);
+
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        throw new Exception('JSON inválido.');
+    }
+
+    $spreadsheetId = $data['spreadsheetId'] ?? '1UW_dbtJEFJeOjCg323HJPaacqPIztw_9bGI5Rw6HRxQ';
+    $worksheetTitle = $data['worksheetTitle'] ?? date('Y');
     $range = $worksheetTitle . '!A:AI';
 
     // Inicializar Google Client

@@ -45,7 +45,7 @@ try {
 
     // Obtener parámetros dinámicos del payload
     $spreadsheetId = $data['spreadsheetId'] ?? '1UW_dbtJEFJeOjCg323HJPaacqPIztw_9bGI5Rw6HRxQ';
-    $worksheetTitle = $data['worksheetTitle'] ?? '2026';
+    $worksheetTitle = $data['worksheetTitle'] ?? date('Y');
     $range = $worksheetTitle . '!A:AI';
 
     // Inicializar Google Client
