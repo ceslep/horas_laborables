@@ -46,7 +46,7 @@ try {
     // Obtener parámetros dinámicos del payload
     $spreadsheetId = $data['spreadsheetId'] ?? '1UW_dbtJEFJeOjCg323HJPaacqPIztw_9bGI5Rw6HRxQ';
     $worksheetTitle = $data['worksheetTitle'] ?? date('Y');
-    $range = $worksheetTitle . '!A:AI';
+    $range = $worksheetTitle . '!A1:AI1000'; // Forzar lectura de más filas
 
     // Inicializar Google Client
     $client = new Client();
@@ -62,26 +62,23 @@ try {
     $service = new Sheets($client);
 
 // Preparar los datos finales sin timestamp
-    $newData = $data['values']; // [email, nombre, mes, d1, d2, ..., d31]
+$newData = $data['values']; // [timestamp, email, nombre, mes, d1, d2, ..., d31]
 
-    // Obtener valores actuales para buscar duplicados
+    // Debug: Log los datos recibidos
+    error_log("DEBUG: newData[0]=" . $newData[0] . " [timestamp]");
+    error_log("DEBUG: newData[1]=" . $newData[1] . " [email]");
+    error_log("DEBUG: newData[2]=" . $newData[2] . " [nombre]");
+    error_log("DEBUG: newData[3]=" . $newData[3] . " [mes]");
+
+// Leer todos los valores para búsqueda completa
     $response = $service->spreadsheets_values->get($spreadsheetId, $range);
     $allValues = $response->getValues();
     
-    $foundRowIndex = -1;
+$foundRowIndex = -1;
 
-    if ($allValues) {
-        foreach ($allValues as $idx => $row) {
-// Verificar si coinciden: Email(0), Docente(1), Mes(2)
-            if (isset($row[0], $row[1], $row[2]) &&
-                $row[0] == $newData[0] &&
-                $row[1] == $newData[1] &&
-                $row[2] == $newData[2]) {
-                $foundRowIndex = $idx + 1; // Las filas en Sheets son base 1
-                break;
-            }
-        }
-    }
+// TEMPORAL: Forzar siempre append para probar
+    $foundRowIndex = -1; // Siempre -1 para forzar append
+    error_log("DEBUG: MODO FORZADO - siempre hará append");
 
     // Preparar el cuerpo para la operación
     $body = new ValueRange([
@@ -89,19 +86,37 @@ try {
     ]);
     $params = ['valueInputOption' => 'RAW'];
 
-    $returnedRowIndex = -1; // Variable para almacenar el rowIndex
+$returnedRowIndex = -1; // Variable para almacenar el rowIndex
+
+    error_log("DEBUG: foundRowIndex=$foundRowIndex");
 
     if ($foundRowIndex !== -1) {
-        // Actualizar fila existente
+        // Actualizar fila existente - preservando datos históricos
+        // Solo actualizamos si la combinación C:D coincide exactamente
         // Calculamos el rango exacto para la fila encontrada: A{index}:AI{index}
+        error_log("DEBUG: Ejecutando UPDATE en fila $foundRowIndex - coincidencia para Nombre='" . $newData[2] . "' Mes='" . $newData[3] . "'");
         $updateRange = $worksheetTitle . "!A$foundRowIndex:AI$foundRowIndex";
         $result = $service->spreadsheets_values->update($spreadsheetId, $updateRange, $body, $params);
-        $message = 'Registro actualizado exitosamente.';
+        $message = 'Registro actualizado exitosamente (misma combinación Nombre-Mes).';
         $returnedRowIndex = $foundRowIndex; // Ya tenemos el índice
-    } else {
-        // Crear nueva fila (Append)
-        $result = $service->spreadsheets_values->append($spreadsheetId, $range, $body, $params);
-        $message = 'Registro guardado exitosamente.';
+} else {
+        // Crear nueva fila (Append) - nueva combinación Nombre-Mes
+        // Preserva todos los datos históricos existentes
+        error_log("DEBUG: Ejecutando APPEND FORZADO - Nombre='" . $newData[2] . "' Mes='" . $newData[3] . "'");
+        
+        // Usar un rango específico para append
+        $appendRange = $worksheetTitle . '!A1';
+        $result = $service->spreadsheets_values->append($spreadsheetId, $appendRange, $body, $params);
+        
+        // Log del resultado para depuración
+        if (isset($result->updates->updatedRange)) {
+            error_log("DEBUG: Append result updatedRange=" . $result->updates->updatedRange);
+        }
+        if (isset($result->updates->updatedRows)) {
+            error_log("DEBUG: Append result updatedRows=" . $result->updates->updatedRows);
+        }
+        
+        $message = 'Nuevo registro creado exitosamente (combinación Nombre-Mes única).';
         
         // Extraer el rowIndex de la respuesta de append
         if (isset($result->updates->updatedRange)) {

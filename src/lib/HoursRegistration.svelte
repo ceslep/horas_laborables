@@ -219,7 +219,8 @@
           return hoursData[dayNum] || "";
         });
 
-        const values = [email, teacherName, month, ...daysArray];
+const timestamp = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' });
+        const values = [timestamp, email, teacherName, month, ...daysArray];
         const result = await sheetsService.appendRow(values, existingRecordIndex);
 
         if (result.success) {
@@ -260,16 +261,16 @@
     try {
       const result = await sheetsService.getRows();
       if (result.success && result.records) {
-// Buscar si ya existe un registro para este docente y mes
+// Buscar si ya existe un registro para este docente y mes (ignorando marca temporal en índice 0)
         const existingRecord = result.records.find((record) => {
-          return record.values[1] === teacherName && record.values[2] === month;
+          return record.values[2]?.trim() === teacherName.trim() && record.values[3]?.trim() === month.trim();
         });
 
         if (existingRecord) {
           existingRecordIndex = existingRecord.rowIndex; // Store row index
 const loadedData: Record<number, string> = {};
           for (let i = 1; i <= 31; i++) {
-            const val = existingRecord.values[i + 2];
+            const val = existingRecord.values[i + 3]; // +3 porque ahora: timestamp(0), email(1), nombre(2), mes(3), días(4-34)
             if (val) loadedData[i] = val;
           }
           hoursData = loadedData;
