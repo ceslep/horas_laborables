@@ -32,7 +32,7 @@ try {
     // Leer datos del payload JSON
     $input = file_get_contents('php://input');
     $data = json_decode($input, true);
-
+    
     if (json_last_error() !== JSON_ERROR_NONE) {
         throw new Exception('JSON inválido.');
     }
@@ -56,11 +56,23 @@ try {
 
     // Obtener valores
     $response = $service->spreadsheets_values->get($spreadsheetId, $range);
-    $values = $response->getValues();
+    $values = []; // Initialize as empty array
+    if ($response !== null) { // Check if $response is not null
+        $values = $response->getValues();
+    }
+    $dataWithIndex = [];
+    if ($values) {
+        foreach ($values as $idx => $row) {
+            $dataWithIndex[] = [
+                'rowIndex' => $idx + 1, // Google Sheets rows are 1-based
+                'values' => $row
+            ];
+        }
+    }
 
     echo json_encode([
         'success' => true,
-        'values' => $values ?? []
+        'records' => $dataWithIndex
     ]);
 
 } catch (Exception $e) {

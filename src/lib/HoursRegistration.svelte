@@ -7,6 +7,7 @@
   import AdminStats from "./AdminStats.svelte";
   import { sheetsService } from "./services/google_sheets_service.svelte";
   import escudo from "../assets/eie.png";
+  import { festivos } from "./festivos";
 
   let email = $state("");
   let teacherName = $state("");
@@ -15,6 +16,7 @@
   let isSaving = $state(false);
   let isLoadingData = $state(false);
   let showAdminStats = $state(false);
+  let existingRecordIndex: number | null = null;
   let saveStatus = $state<"saved" | "saving" | "error" | "idle">("idle");
   let saveTimeout: any;
 
@@ -161,6 +163,13 @@
       icon: "📢",
     },
     {
+      id: "extra",
+      label: "Jornada Extra",
+      shortLabel: "Extra",
+      color: "bg-orange-700",
+      icon: "💪",
+    },
+    {
       id: "sabdomfest",
       label: "Sábados, Domingos y Festivos",
       shortLabel: "SDF",
@@ -170,7 +179,7 @@
   ];
 
   const INSTITUTION_NAME = "INSTITUTO GUÁTICA";
-  const currentYear = new Date().getFullYear();
+  const currentYear = 2026;
 
   function getDaysInMonth(monthName: string) {
     const monthIndex = months.indexOf(monthName);
@@ -211,10 +220,13 @@
         });
 
         const values = [email, teacherName, month, ...daysArray];
-        const result = await sheetsService.appendRow(values);
+        const result = await sheetsService.appendRow(values, existingRecordIndex);
 
         if (result.success) {
           saveStatus = "saved";
+          if (!result.updated && result.rowIndex) {
+            existingRecordIndex = result.rowIndex; // Store new row index for future updates
+          }
           setTimeout(() => {
             if (saveStatus === "saved") saveStatus = "idle";
           }, 3000);
@@ -242,30 +254,27 @@
   });
 
   async function loadExistingRecords() {
+    console.log("loadExistingRecords called.");
     isLoadingData = true;
+    existingRecordIndex = null; // Reset before loading
     try {
       const result = await sheetsService.getRows();
-      if (result.success && result.values) {
-        // Buscar si ya existe un registro para este docente y mes
-        // Estructura: [Timestamp, Email, Docente, Mes, D1, D2, ..., D31]
-        // Docente está en index 2, Mes en index 3 (en la respuesta de getRows)
-        // Nota: depende de cómo devuelve los datos el backend.
-        // get_horas.php devuelve $response->getValues()
-
-        const existingRow = result.values.find((row: any[]) => {
-          return row[2] === teacherName && row[3] === month;
+      if (result.success && result.records) {
+// Buscar si ya existe un registro para este docente y mes
+        const existingRecord = result.records.find((record) => {
+          return record.values[1] === teacherName && record.values[2] === month;
         });
 
-        if (existingRow) {
-          const loadedData: Record<number, string> = {};
-          // Los días empiezan en el index 4
+        if (existingRecord) {
+          existingRecordIndex = existingRecord.rowIndex; // Store row index
+const loadedData: Record<number, string> = {};
           for (let i = 1; i <= 31; i++) {
-            const val = existingRow[i + 3];
+            const val = existingRecord.values[i + 2];
             if (val) loadedData[i] = val;
           }
           hoursData = loadedData;
         } else {
-          // No hay registro previo: marcar fines de semana
+          // No hay registro previo: marcar fines de semana y festivos
           const monthIndex = months.indexOf(month);
           const autoFilledData: Record<number, string> = {};
           if (monthIndex !== -1) {
@@ -281,6 +290,18 @@
                 autoFilledData[d] = "sabdomfest";
               }
             }
+
+            // Mark holidays from festivosData
+            festivos.forEach((festivo) => {
+              const [year, month, day] = festivo.fecha.split('-').map(Number);
+              const holidayDate = new Date(year, month - 1, day);
+              if (
+                holidayDate.getFullYear() === currentYear &&
+                holidayDate.getMonth() === monthIndex
+              ) {
+                autoFilledData[holidayDate.getDate()] = "sabdomfest";
+              }
+            });
           }
           hoursData = autoFilledData;
         }
@@ -292,27 +313,51 @@
     }
   }
 
-  async function handleOpenStats() {
-    const { value: password } = await Swal.fire({
-      title: "Acceso Administrativo",
-      input: "password",
-      inputLabel: "Ingrese la contraseña de administrador",
-      inputPlaceholder: "Contraseña",
-      showCancelButton: true,
-      confirmButtonText: "Acceder",
-      cancelButtonText: "Cancelar",
-      confirmButtonColor: "#4f46e5",
-    });
-
-    if (password === "1234") {
-      showAdminStats = true;
-    } else if (password) {
-      Swal.fire({
-        icon: "error",
-        title: "Contraseña Incorrecta",
-        text: "No tiene permisos para acceder a esta sección.",
-      });
+  function handleOpenStats() {
+    console.log("triggerAutoSave called. email:", email, "teacherName:", teacherName, "month:", month, "existingRecordIndex:", existingRecordIndex);
+    if (!email || !teacherName || !month) {
+      console.log("Auto-save skipped: email, teacherName, or month is empty.");
+      return;
     }
+
+    saveStatus = "saving";
+    console.log("Save status set to 'saving'.");
+    if (saveTimeout) clearTimeout(saveTimeout);
+
+    saveTimeout = setTimeout(async () => {
+      try {
+        const daysArray = Array.from({ length: 31 }, (_, i) => {
+          const dayNum = i + 1;
+          return hoursData[dayNum] || "";
+        });
+
+        const values = [email, teacherName, month, ...daysArray];
+        console.log("Calling sheetsService.appendRow with values:", values, "and existingRecordIndex:", existingRecordIndex);
+        const result = await sheetsService.appendRow(values, existingRecordIndex);
+        console.log("sheetsService.appendRow result:", result);
+
+        if (result.success) {
+          saveStatus = "saved";
+          console.log("Save status set to 'saved'.");
+          if (!result.updated && result.rowIndex) {
+            existingRecordIndex = result.rowIndex; // Store new row index for future updates
+            console.log("New record created, existingRecordIndex updated to:", existingRecordIndex);
+          }
+          setTimeout(() => {
+            if (saveStatus === "saved") {
+              saveStatus = "idle";
+              console.log("Save status reverted to 'idle'.");
+            }
+          }, 3000);
+        } else {
+          saveStatus = "error";
+          console.log("Save status set to 'error'. Result:", result);
+        }
+      } catch (error) {
+        console.error("Auto-save error:", error);
+        saveStatus = "error";
+      }
+    }, 1000);
   }
 
   const weekdays = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];

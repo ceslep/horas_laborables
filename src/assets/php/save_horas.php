@@ -61,9 +61,8 @@ try {
 
     $service = new Sheets($client);
 
-    // Preparar los datos finales con Marca Temporal al inicio
-    $timestamp = date('d/m/Y H:i:s');
-    $newData = array_merge([$timestamp], $data['values']); // [timestamp, email, nombre, mes, d1, d2, ..., d31]
+// Preparar los datos finales sin timestamp
+    $newData = $data['values']; // [email, nombre, mes, d1, d2, ..., d31]
 
     // Obtener valores actuales para buscar duplicados
     $response = $service->spreadsheets_values->get($spreadsheetId, $range);
@@ -73,11 +72,11 @@ try {
 
     if ($allValues) {
         foreach ($allValues as $idx => $row) {
-            // Verificar si coinciden: Email(1), Docente(2), Mes(3)
-            if (isset($row[1], $row[2], $row[3]) &&
+// Verificar si coinciden: Email(0), Docente(1), Mes(2)
+            if (isset($row[0], $row[1], $row[2]) &&
+                $row[0] == $newData[0] &&
                 $row[1] == $newData[1] &&
-                $row[2] == $newData[2] &&
-                $row[3] == $newData[3]) {
+                $row[2] == $newData[2]) {
                 $foundRowIndex = $idx + 1; // Las filas en Sheets son base 1
                 break;
             }
@@ -90,22 +89,34 @@ try {
     ]);
     $params = ['valueInputOption' => 'RAW'];
 
+    $returnedRowIndex = -1; // Variable para almacenar el rowIndex
+
     if ($foundRowIndex !== -1) {
         // Actualizar fila existente
         // Calculamos el rango exacto para la fila encontrada: A{index}:AI{index}
         $updateRange = $worksheetTitle . "!A$foundRowIndex:AI$foundRowIndex";
         $result = $service->spreadsheets_values->update($spreadsheetId, $updateRange, $body, $params);
         $message = 'Registro actualizado exitosamente.';
+        $returnedRowIndex = $foundRowIndex; // Ya tenemos el índice
     } else {
         // Crear nueva fila (Append)
         $result = $service->spreadsheets_values->append($spreadsheetId, $range, $body, $params);
         $message = 'Registro guardado exitosamente.';
+        
+        // Extraer el rowIndex de la respuesta de append
+        if (isset($result->updates->updatedRange)) {
+            preg_match('/A(\d+):/', $result->updates->updatedRange, $matches);
+            if (isset($matches[1])) {
+                $returnedRowIndex = (int)$matches[1];
+            }
+        }
     }
 
     echo json_encode([
         'success' => true,
         'message' => $message,
-        'updated' => $foundRowIndex !== -1
+        'updated' => $foundRowIndex !== -1,
+        'rowIndex' => $returnedRowIndex // Devolver el rowIndex
     ]);
 
 } catch (Exception $e) {

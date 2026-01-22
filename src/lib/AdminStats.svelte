@@ -132,8 +132,8 @@
     onMount(async () => {
         try {
             const result = await sheetsService.getRows();
-            if (result.success && result.values) {
-                rows = result.values;
+            if (result.success && result.records) {
+                rows = result.records.map(record => record.values); // Extract only the values
                 processStats(rows);
             }
         } catch (error) {

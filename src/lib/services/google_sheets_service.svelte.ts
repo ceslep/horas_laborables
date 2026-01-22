@@ -43,9 +43,19 @@ export class GoogleSheetsService {
   /**
    * Envía los datos al backend PHP para guardarlos en Google Sheets.
    */
-  async appendRow(row: any[]) {
+  async appendRow(row: any[], rowIndex: number | null = null) {
     if (!this.backendUrl) {
       throw new Error("Backend URL no configurada.");
+    }
+
+    const payload: { spreadsheetId: string; worksheetTitle: string; values: any[]; rowIndex?: number } = {
+      spreadsheetId: this.spreadsheetId,
+      worksheetTitle: this.worksheetTitle,
+      values: row,
+    };
+
+    if (rowIndex !== null) {
+      payload.rowIndex = rowIndex;
     }
 
     const response = await fetch(`${this.backendUrl}/save_horas.php`, {
@@ -53,11 +63,7 @@ export class GoogleSheetsService {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        spreadsheetId: this.spreadsheetId,
-        worksheetTitle: this.worksheetTitle,
-        values: row,
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
@@ -71,7 +77,7 @@ export class GoogleSheetsService {
   /**
    * Obtiene todos los registros del backend PHP.
    */
-  async getRows() {
+  async getRows(): Promise<{ success: boolean; records: { rowIndex: number; values: any[] }[] }> {
     if (!this.backendUrl) {
       throw new Error("Backend URL no configurada.");
     }
