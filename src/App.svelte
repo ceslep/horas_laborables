@@ -2,7 +2,7 @@
   import HoursRegistration from "./lib/HoursRegistration.svelte";
 </script>
 
-<main class="min-h-screen bg-[#050505] text-white selection:bg-purple-500/30">
+<main class="min-h-screen bg-slate-50 text-slate-900 selection:bg-purple-500/30">
   <HoursRegistration />
 </main>
 

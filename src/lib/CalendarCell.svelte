@@ -20,8 +20,70 @@
   }: Props = $props();
 
   let showMenu = $state(false);
+  let buttonRef = $state<HTMLButtonElement | null>(null);
+  let menuPosition = $state<{
+    top: number;
+    left: number | "auto";
+    right: number | "auto";
+  }>({
+    top: 0,
+    left: 0 as number | "auto",
+    right: "auto",
+  });
 
   const selectedCategory = $derived(categories.find((c) => c.id === value));
+
+  function calculateMenuPosition() {
+    if (!buttonRef) return;
+    const rect = buttonRef.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const menuWidth = 224; // w-56 = 14rem = 224px
+    const menuMaxHeight = 288; // max-h-72 = 18rem = 288px
+
+    // Check if we're on mobile or desktop
+    const isMobile = viewportWidth < 768;
+
+    if (isMobile) {
+      // On mobile, center the menu horizontally
+      const leftPosition = Math.max(
+        8,
+        Math.min(
+          viewportWidth - menuWidth - 8,
+          (viewportWidth - menuWidth) / 2,
+        ),
+      );
+
+      // Position below button, but check if it fits
+      let topPosition = rect.bottom + 8;
+
+      // If menu would go off bottom, position it above the button
+      if (topPosition + menuMaxHeight > viewportHeight - 8) {
+        topPosition = Math.max(8, rect.top - menuMaxHeight - 8);
+      }
+
+      menuPosition = {
+        top: topPosition,
+        left: leftPosition,
+        right: "auto",
+      };
+    } else {
+      // On desktop, position from right
+      const rightPosition = viewportWidth - rect.right;
+      let topPosition = rect.bottom + 8;
+
+      // If menu would go off bottom, position it above
+      if (topPosition + menuMaxHeight > viewportHeight - 8) {
+        topPosition = Math.max(8, rect.top - menuMaxHeight - 8);
+      }
+
+      menuPosition = {
+        top: topPosition,
+        left: "auto",
+        right: rightPosition,
+      };
+    }
+  }
 
   function handleSelect(id: string) {
     onSelect(id);
@@ -46,7 +108,7 @@
       <span
         class="text-sm md:text-xs font-bold {selectedCategory
           ? 'text-slate-900'
-          : 'text-slate-300'}"
+          : 'text-slate-400'}"
       >
         {day !== 0 ? day : ""}
       </span>
@@ -70,10 +132,7 @@
           <span
             class="text-[9px] font-bold text-white leading-tight uppercase line-clamp-1 md:line-clamp-2"
           >
-            {selectedCategory.label.split(",").length > 1
-              ? selectedCategory.label.split(",")[1]?.trim().split(" ")[0] ||
-                selectedCategory.label
-              : selectedCategory.label.split(" ")[1] || selectedCategory.label}
+            {selectedCategory.shortLabel || selectedCategory.label}
           </span>
         </div>
       {/if}
@@ -82,7 +141,13 @@
     <!-- Action Button -->
     {#if isCurrentMonth && day !== 0}
       <button
-        onclick={() => (showMenu = !showMenu)}
+        bind:this={buttonRef}
+        onclick={() => {
+          if (!showMenu) {
+            calculateMenuPosition();
+          }
+          showMenu = !showMenu;
+        }}
         class="w-8 h-8 md:w-6 md:h-6 rounded-full flex items-center justify-center bg-slate-50 md:bg-transparent border border-slate-100 md:border-none hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all active:scale-90"
       >
         <span class="text-xl md:text-lg">+</span>
@@ -92,7 +157,12 @@
 
   {#if showMenu}
     <div
-      class="absolute left-0 md:left-auto md:right-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 p-2 space-y-1 max-h-72 overflow-y-auto custom-scrollbar animate-in slide-in-from-top-2 duration-200"
+      class="fixed w-56 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[9999] p-2 space-y-1 max-h-72 overflow-y-auto custom-scrollbar animate-in slide-in-from-top-2 duration-200"
+      style="top: {menuPosition.top}px; left: {menuPosition.left === 'auto'
+        ? 'auto'
+        : menuPosition.left + 'px'}; right: {menuPosition.right === 'auto'
+        ? 'auto'
+        : menuPosition.right + 'px'};"
       in:fade={{ duration: 150 }}
     >
       <div class="px-3 py-2 border-b border-slate-50 mb-1">
@@ -131,7 +201,7 @@
 
 {#if showMenu}
   <button
-    class="fixed inset-0 z-40 w-full h-full border-none bg-transparent cursor-default"
+    class="fixed inset-0 z-[9998] w-full h-full border-none bg-transparent cursor-default"
     onclick={() => (showMenu = false)}
     aria-label="Cerrar menú"
   ></button>

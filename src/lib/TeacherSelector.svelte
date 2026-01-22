@@ -29,7 +29,7 @@
 <select
   {id}
   bind:value
-  class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all appearance-none cursor-pointer"
+  class="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all appearance-none cursor-pointer"
 >
   <option value="" disabled selected>Seleccione un docente...</option>
   {#each teachers as teacher}
