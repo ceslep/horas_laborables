@@ -1,10 +1,12 @@
 <script lang="ts">
-  import { fade, fly } from "svelte/transition";
+  import { fade } from "svelte/transition";
   import Swal from "sweetalert2";
   import CalendarCell from "./CalendarCell.svelte";
   import TeacherSelector from "./TeacherSelector.svelte";
   import Loader from "./Loader.svelte";
   import AdminStats from "./AdminStats.svelte";
+  import SyncNotification from "./SyncNotification.svelte";
+  import PieChart from "./PieChart.svelte";
   import { sheetsService } from "./services/google_sheets_service.svelte";
   import escudo from "../assets/eie.png";
   import { festivos } from "./festivos";
@@ -19,6 +21,12 @@
   let existingRecordIndex: number | null = null;
   let saveStatus = $state<"saved" | "saving" | "error" | "idle">("idle");
   let saveTimeout: any;
+  let notificationConfig = $state({
+    show: false,
+    message: "",
+    type: "saving" as "saving" | "saved" | "error" | "info",
+  });
+  let backendData = $state<Record<string, number>>({});
 
   const months = [
     "Enero",
@@ -190,7 +198,6 @@
   function getStartDay(monthName: string) {
     const monthIndex = months.indexOf(monthName);
     if (monthIndex === -1) return 0;
-    // (getDay() + 6) % 7 converts 0-6 (Sun-Sat) to 0-6 (Mon-Sun)
     return (new Date(currentYear, monthIndex, 1).getDay() + 6) % 7;
   }
 
@@ -210,33 +217,80 @@
     if (!email || !teacherName || !month) return;
 
     saveStatus = "saving";
+    notificationConfig = {
+      show: true,
+      message: "Sincronizando datos...",
+      type: "saving",
+    };
     if (saveTimeout) clearTimeout(saveTimeout);
 
     saveTimeout = setTimeout(async () => {
       try {
-        const daysArray = Array.from({ length: 31 }, (_, i) => {
-          const dayNum = i + 1;
-          return hoursData[dayNum] || "";
+        const daysArray: string[] = [];
+        for (let day = 1; day <= 31; day++) {
+          daysArray.push(hoursData[day] || "");
+        }
+
+        if (daysArray.length !== 31) {
+          throw new Error("Error interno: no se generaron 31 días.");
+        }
+
+        const timestamp = new Date().toLocaleString("es-CO", {
+          timeZone: "America/Bogota",
         });
 
-const timestamp = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' });
         const values = [timestamp, email, teacherName, month, ...daysArray];
-        const result = await sheetsService.appendRow(values, existingRecordIndex);
+
+        if (values.length !== 35) {
+          throw new Error(
+            `Payload inválido: se esperaban 35 elementos, pero se tienen ${values.length}.`,
+          );
+        }
+
+        const result = await sheetsService.appendRow(
+          values,
+          existingRecordIndex,
+        );
 
         if (result.success) {
           saveStatus = "saved";
+          notificationConfig = {
+            show: true,
+            message: "✅ Cambios guardados exitosamente",
+            type: "saved",
+          };
+
+          const savedCategoryCount: Record<string, number> = {};
+          Object.entries(hoursData).forEach(([day, categoryId]) => {
+            if (categoryId) {
+              savedCategoryCount[categoryId] =
+                (savedCategoryCount[categoryId] || 0) + 1;
+            }
+          });
+          backendData = savedCategoryCount;
+
           if (!result.updated && result.rowIndex) {
-            existingRecordIndex = result.rowIndex; // Store new row index for future updates
+            existingRecordIndex = result.rowIndex;
           }
           setTimeout(() => {
             if (saveStatus === "saved") saveStatus = "idle";
           }, 3000);
         } else {
           saveStatus = "error";
+          notificationConfig = {
+            show: true,
+            message: "❌ Error al guardar los cambios",
+            type: "error",
+          };
         }
       } catch (error) {
         console.error("Auto-save error:", error);
         saveStatus = "error";
+        notificationConfig = {
+          show: true,
+          message: "❌ Error de conexión",
+          type: "error",
+        };
       }
     }, 1000);
   }
@@ -245,37 +299,47 @@ const timestamp = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota
   const totalDays = $derived(daysInMonth || 30);
   const progress = $derived((completedDays / totalDays) * 100);
 
-  // Carga de datos existentes
   $effect(() => {
     if (teacherName && month) {
       loadExistingRecords();
     } else {
       hoursData = {};
+      backendData = {};
     }
   });
 
   async function loadExistingRecords() {
-    console.log("loadExistingRecords called.");
     isLoadingData = true;
-    existingRecordIndex = null; // Reset before loading
+    existingRecordIndex = null;
+    backendData = {};
     try {
       const result = await sheetsService.getRows();
       if (result.success && result.records) {
-// Buscar si ya existe un registro para este docente y mes (ignorando marca temporal en índice 0)
         const existingRecord = result.records.find((record) => {
-          return record.values[2]?.trim() === teacherName.trim() && record.values[3]?.trim() === month.trim();
+          return (
+            record.values[2]?.trim() === teacherName.trim() &&
+            record.values[3]?.trim() === month.trim()
+          );
         });
 
         if (existingRecord) {
-          existingRecordIndex = existingRecord.rowIndex; // Store row index
-const loadedData: Record<number, string> = {};
+          existingRecordIndex = existingRecord.rowIndex;
+          const loadedData: Record<number, string> = {};
           for (let i = 1; i <= 31; i++) {
-            const val = existingRecord.values[i + 3]; // +3 porque ahora: timestamp(0), email(1), nombre(2), mes(3), días(4-34)
+            const val = existingRecord.values[i + 3];
             if (val) loadedData[i] = val;
           }
           hoursData = loadedData;
+
+          const backendCategoryCount: Record<string, number> = {};
+          for (let i = 1; i <= 31; i++) {
+            const val = existingRecord.values[i + 3];
+            if (val) {
+              backendCategoryCount[val] = (backendCategoryCount[val] || 0) + 1;
+            }
+          }
+          backendData = backendCategoryCount;
         } else {
-          // No hay registro previo: marcar fines de semana y festivos
           const monthIndex = months.indexOf(month);
           const autoFilledData: Record<number, string> = {};
           if (monthIndex !== -1) {
@@ -286,16 +350,17 @@ const loadedData: Record<number, string> = {};
             ).getDate();
             for (let d = 1; d <= daysInMonthCount; d++) {
               const date = new Date(currentYear, monthIndex, d);
-              const dayOfWeek = date.getDay(); // 0 is Sunday, 6 is Saturday
+              const dayOfWeek = date.getDay();
               if (dayOfWeek === 0 || dayOfWeek === 6) {
                 autoFilledData[d] = "sabdomfest";
               }
             }
 
-            // Mark holidays from festivosData
             festivos.forEach((festivo) => {
-              const [year, month, day] = festivo.fecha.split('-').map(Number);
-              const holidayDate = new Date(year, month - 1, day);
+              const [year, monthNum, day] = festivo.fecha
+                .split("-")
+                .map(Number);
+              const holidayDate = new Date(year, monthNum - 1, day);
               if (
                 holidayDate.getFullYear() === currentYear &&
                 holidayDate.getMonth() === monthIndex
@@ -315,53 +380,35 @@ const loadedData: Record<number, string> = {};
   }
 
   function handleOpenStats() {
-    console.log("triggerAutoSave called. email:", email, "teacherName:", teacherName, "month:", month, "existingRecordIndex:", existingRecordIndex);
     if (!email || !teacherName || !month) {
-      console.log("Auto-save skipped: email, teacherName, or month is empty.");
+      showAdminStats = true;
       return;
     }
 
-    saveStatus = "saving";
-    console.log("Save status set to 'saving'.");
-    if (saveTimeout) clearTimeout(saveTimeout);
-
-    saveTimeout = setTimeout(async () => {
-      try {
-        const daysArray = Array.from({ length: 31 }, (_, i) => {
-          const dayNum = i + 1;
-          return hoursData[dayNum] || "";
-        });
-
-        const values = [email, teacherName, month, ...daysArray];
-        console.log("Calling sheetsService.appendRow with values:", values, "and existingRecordIndex:", existingRecordIndex);
-        const result = await sheetsService.appendRow(values, existingRecordIndex);
-        console.log("sheetsService.appendRow result:", result);
-
-        if (result.success) {
-          saveStatus = "saved";
-          console.log("Save status set to 'saved'.");
-          if (!result.updated && result.rowIndex) {
-            existingRecordIndex = result.rowIndex; // Store new row index for future updates
-            console.log("New record created, existingRecordIndex updated to:", existingRecordIndex);
-          }
-          setTimeout(() => {
-            if (saveStatus === "saved") {
-              saveStatus = "idle";
-              console.log("Save status reverted to 'idle'.");
-            }
-          }, 3000);
-        } else {
-          saveStatus = "error";
-          console.log("Save status set to 'error'. Result:", result);
-        }
-      } catch (error) {
-        console.error("Auto-save error:", error);
-        saveStatus = "error";
-      }
-    }, 1000);
+    triggerAutoSave();
+    setTimeout(() => {
+      showAdminStats = true;
+    }, 1500);
   }
 
   const weekdays = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+  // ✅ CORRECCIÓN CLAVE: uso correcto de $derived.by
+  const pieChartData = $derived.by(() => {
+    // Prioridad: usar backendData si tiene datos
+    if (Object.keys(backendData).length > 0) {
+      return backendData;
+    }
+
+    // Si no, usar el estado local actual
+    const categoryCount: Record<string, number> = {};
+    for (const [day, categoryId] of Object.entries(hoursData)) {
+      if (categoryId) {
+        categoryCount[categoryId] = (categoryCount[categoryId] || 0) + 1;
+      }
+    }
+    return categoryCount;
+  });
 </script>
 
 <div class="max-w-[1600px] mx-auto p-3 sm:p-4 md:p-8" in:fade>
@@ -575,6 +622,32 @@ const loadedData: Record<number, string> = {};
               </div>
             </div>
           </div>
+
+          <!-- Pie Chart -->
+          <div class="mt-4">
+            <h3 class="text-sm font-semibold text-slate-700 mb-2">
+              Resumen de Actividades {teacherName && month ? `- ${month}` : ""}
+            </h3>
+            <!-- ✅ CORRECCIÓN: sin paréntesis -->
+            <PieChart
+              data={pieChartData}
+              {categories}
+              title={teacherName && month
+                ? `${month} - ${teacherName}`
+                : "Selecciona docente y mes"}
+            />
+
+            {#if !teacherName || !month}
+              <div
+                class="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-center"
+              >
+                <p class="text-xs text-blue-700">
+                  {!teacherName ? "Selecciona un docente" : "Selecciona un mes"}
+                  para ver datos específicos
+                </p>
+              </div>
+            {/if}
+          </div>
         </div>
       </div>
     </div>
@@ -767,6 +840,12 @@ const loadedData: Record<number, string> = {};
 {/if}
 
 <Loader show={isLoadingData} message="Cargando datos del registro..." />
+
+<SyncNotification
+  show={notificationConfig.show}
+  message={notificationConfig.message}
+  type={notificationConfig.type}
+/>
 
 <style>
   .custom-scrollbar::-webkit-scrollbar {

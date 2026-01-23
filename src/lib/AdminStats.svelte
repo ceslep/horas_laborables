@@ -16,6 +16,9 @@
     let categoryStats: Record<string, number> = $state({});
     let totalRecords = $state(0);
     let topTeacher = $state({ name: "", count: 0 });
+    let allTeachers: string[] = $state([]);
+    let selectedTeacherForStats = $state("");
+    let selectedMonthForStats: string = $state("");
 
     const categories = [
         {
@@ -134,12 +137,23 @@
             const result = await sheetsService.getRows();
             if (result.success && result.records) {
                 rows = result.records.map(record => record.values); // Extract only the values
+                // Initialize selected teacher if provided
+                if (selectedTeacher) {
+                    selectedTeacherForStats = selectedTeacher;
+                }
                 processStats(rows);
             }
         } catch (error) {
             console.error("Error fetching stats:", error);
         } finally {
             isLoading = false;
+        }
+    });
+
+    // Recalculate stats when selected teacher changes
+    $effect(() => {
+        if (rows.length > 0) {
+            processStats(rows);
         }
     });
 
@@ -156,17 +170,43 @@
                 row[3] !== "MES",
         );
 
-        if (selectedTeacher) {
-            cleanData = cleanData.filter((row) => row[2] === selectedTeacher);
+        // Extract all unique teachers
+        const uniqueTeachers = new Set<string>();
+        cleanData.forEach((row) => {
+            if (row[2]) {
+                uniqueTeachers.add(row[2]);
+            }
+        });
+        allTeachers = Array.from(uniqueTeachers).sort();
+
+        if (selectedTeacherForStats) {
+            cleanData = cleanData.filter((row) => row[2] === selectedTeacherForStats);
+        }
+
+        // Filter by selected month if any
+        if (selectedMonthForStats) {
+            cleanData = cleanData.filter((row) => row[3] === selectedMonthForStats);
         }
 
         totalRecords = cleanData.length;
 
-        // Stats by Month
+        // Stats by Month - Count actual days registered, not just records
         const months: Record<string, number> = {};
+        const monthOrder = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+        
         cleanData.forEach((row) => {
             const month = row[3];
-            months[month] = (months[month] || 0) + 1;
+            const days = row.slice(4); // Get days data (indexes 4-34)
+            
+            // Count non-empty days for this record
+            let dayCount = 0;
+            days.forEach((day: string) => {
+                if (day && day.trim() !== "") {
+                    dayCount++;
+                }
+            });
+            
+            months[month] = (months[month] || 0) + dayCount;
         });
         monthlyStats = months;
 
@@ -211,6 +251,12 @@
         const values = Object.values(monthlyStats);
         return values.length ? Math.max(...values) : 1;
     }
+
+    function selectMonthForStats(month: string) {
+        selectedMonthForStats = selectedMonthForStats === month ? "" : month;
+    }
+
+
 </script>
 
 <div
@@ -225,17 +271,46 @@
             <div
                 class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
             >
-                <div>
+                <div class="w-full">
                     <h1 class="text-3xl font-bold text-slate-900">
-                        {selectedTeacher
+                        {selectedTeacherForStats
                             ? "Estadísticas Docentes"
                             : "Panel Global"}
                     </h1>
-                    <p class="text-slate-500">
-                        {selectedTeacher
-                            ? `Resumen detallado para: ${selectedTeacher}`
+                    <p class="text-slate-500 mb-4">
+                        {selectedTeacherForStats
+                            ? `Resumen detallado para: ${selectedTeacherForStats}`
                             : "Resumen acumulado de todos los registros"}
                     </p>
+                    
+                    <!-- Teacher Selector -->
+                    <div class="max-w-md">
+                        <label for="teacher-select" class="text-xs font-bold text-slate-600 uppercase tracking-widest block mb-2">
+                            Seleccionar Docente
+                        </label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                            </div>
+                            <select
+                                id="teacher-select"
+                                bind:value={selectedTeacherForStats}
+                                class="w-full bg-white border border-slate-300 rounded-xl pl-11 pr-10 py-3 text-slate-900 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all appearance-none cursor-pointer shadow-sm hover:border-slate-400"
+                            >
+                                <option value="">Todos los Docentes</option>
+                                {#each allTeachers as teacher}
+                                    <option value={teacher}>{teacher}</option>
+                                {/each}
+                            </select>
+                            <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-500">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <button
                     onclick={onBack}
@@ -257,10 +332,10 @@
                     <p
                         class="text-xs font-bold text-slate-400 uppercase tracking-widest"
                     >
-                        Total Registros
+                        {selectedMonthForStats ? "Total Actividades" : "Total Registros"}
                     </p>
                     <p class="text-4xl font-bold text-slate-900 mt-2">
-                        {totalRecords}
+                        {selectedMonthForStats ? Object.values(categoryStats).reduce((sum, count) => sum + count, 0) : totalRecords}
                     </p>
                 </div>
 
@@ -309,12 +384,30 @@
                 class="bg-white rounded-3xl shadow-lg border border-slate-100 overflow-hidden"
             >
                 <div class="p-6 border-b border-slate-50">
-                    <h2 class="text-xl font-bold text-slate-900">
-                        Desglose por Tipo de Actividad
-                    </h2>
-                    <p class="text-sm text-slate-500 mt-1">
-                        Conteo total de días por cada tipo de novedad
-                    </p>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h2 class="text-xl font-bold text-slate-900">
+                                {selectedMonthForStats ? `Desglose por Tipo de Actividad - ${selectedMonthForStats}` : 'Desglose por Tipo de Actividad'}
+                            </h2>
+                            <p class="text-sm text-slate-500 mt-1">
+                                {selectedMonthForStats 
+                                    ? `Conteo de días para ${selectedMonthForStats} ${selectedTeacherForStats ? `- ${selectedTeacherForStats}` : '- Todos los docentes'}` 
+                                    : `Conteo total de días por cada tipo de novedad ${selectedTeacherForStats ? `- ${selectedTeacherForStats}` : '- Todos los docentes'}`}
+                            </p>
+                        </div>
+                        {#if selectedMonthForStats}
+                            <button
+                                type="button"
+                                onclick={() => selectedMonthForStats = ""}
+                                class="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                            >
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                Limpiar filtro
+                            </button>
+                        {/if}
+                    </div>
                 </div>
                 <div class="p-6">
                     <div
@@ -364,16 +457,27 @@
                     </h2>
                 </div>
                 <div class="p-6 space-y-4">
-                    {#each Object.entries(monthlyStats).sort((a, b) => b[1] - a[1]) as [month, count], i}
+                     {#each Object.entries(monthlyStats).sort((a, b) => {
+                         const monthOrder = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+                         const aIndex = monthOrder.indexOf(a[0]);
+                         const bIndex = monthOrder.indexOf(b[0]);
+                         return aIndex - bIndex;
+                     }) as [month, count], i}
                         <div class="space-y-2">
-                            <div
-                                class="flex justify-between text-sm font-medium"
+                            <button
+                                type="button"
+                                class="w-full flex justify-between text-sm font-medium cursor-pointer hover:bg-slate-50 p-2 rounded-lg transition-colors group text-left {selectedMonthForStats === month ? 'bg-blue-50 border border-blue-200' : ''}"
+                                onclick={() => selectMonthForStats(month)}
                             >
-                                <span class="text-slate-700">{month}</span>
-                                <span class="text-slate-900 font-bold"
-                                    >{count}</span
-                                >
-                            </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-slate-700 group-hover:text-blue-600">{month}</span>
+                                    <svg class="w-4 h-4 text-slate-400 group-hover:text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                    </svg>
+                                </div>
+                                <span class="text-slate-900 font-bold group-hover:text-blue-600">{count} días</span>
+                            </button>
                             <!-- Progress Bar -->
                             <div
                                 class="h-3 w-full bg-slate-100 rounded-full overflow-hidden"
