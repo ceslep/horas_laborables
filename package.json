@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "deploy": "gh-pages -d dist",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
@@ -14,6 +15,7 @@
     "@tsconfig/svelte": "^5.0.6",
     "@types/chart.js": "^2.9.41",
     "@types/node": "^24.10.1",
+    "gh-pages": "^6.3.0",
     "svelte": "^5.43.8",
     "svelte-check": "^4.3.4",
     "typescript": "~5.9.3",
