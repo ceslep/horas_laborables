@@ -9,11 +9,12 @@
     icon: string;
   }
 
-  // ✅ Props en modo runes: sin export let, sin genéricos, sin argumentos
+// ✅ Props en modo runes: sin export let, sin genéricos, sin argumentos
   /** @type {{ data?: Record<string, number>, categories?: Category[], title?: string }} */
   const props = $props();
 
-  const data = props.data ?? {};
+  // ✅ Usar snapshot para obtener datos reales del proxy
+  const data = $derived.by(() => $state.snapshot(props.data ?? {}));
   const categories = props.categories ?? [];
   const title = props.title ?? "";
 
@@ -48,16 +49,19 @@
     return colorMap[colorClass] || "#6b7280";
   }
 
-  function createChart() {
-    if (!chartElement || Object.keys(data).length === 0) return;
+function createChart() {
+    const currentData = data;
+    if (!chartElement || Object.keys(currentData).length === 0) {
+      return;
+    }
 
-    const labels = Object.keys(data).map((key) => {
+    const labels = Object.keys(currentData).map((key) => {
       const category = categories.find((cat: Category) => cat.id === key);
       return category ? category.label : key;
     });
 
-    const values = Object.values(data);
-    const colors = Object.keys(data).map((key) => {
+    const values = Object.values(currentData);
+    const colors = Object.keys(currentData).map((key) => {
       const category = categories.find((cat: Category) => cat.id === key);
       return category ? getTailwindColor(category.color) : "#6b7280";
     });
@@ -73,7 +77,7 @@
         labels,
         datasets: [
           {
-            values,
+            data: values,
             backgroundColor: colors,
             borderColor: "#ffffff",
             borderWidth: 2,
@@ -114,8 +118,9 @@
     });
   }
 
-  onMount(() => {
-    if (chartElement && Object.keys(data).length > 0) {
+onMount(() => {
+    const currentData = data;
+    if (chartElement && Object.keys(currentData).length > 0) {
       createChart();
     }
   });
@@ -127,10 +132,12 @@
     }
   });
 
-  // ✅ Reactividad con runes
+// ✅ Reactividad con runes
   $effect(() => {
+    const currentData = data;
+    console.log("PieChart $effect: Checking data for rendering. Data:", currentData, "isEmpty:", Object.keys(currentData).length === 0);
     if (chartElement) {
-      if (Object.keys(data).length > 0) {
+      if (Object.keys(currentData).length > 0) {
         createChart();
       } else if (chartInstance) {
         chartInstance.destroy();
@@ -140,30 +147,32 @@
   });
 </script>
 
-{#if Object.keys(data).length > 0}
-  <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-lg">
-    <h3 class="text-lg font-semibold text-slate-800 mb-4">{title}</h3>
-    <div class="relative" style="height: 300px;">
-      <canvas bind:this={chartElement}></canvas>
-    </div>
-    <div class="mt-4 text-center text-sm text-slate-500">
-      Total: {Object.values(data).reduce(
-        (sum: number, value: number) => sum + value,
-        0,
-      )} días registrados
-    </div>
-  </div>
-{:else}
-  <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-lg">
-    <h3 class="text-lg font-semibold text-slate-800 mb-4">{title}</h3>
-    <div class="flex items-center justify-center h-64 text-slate-400">
-      <div class="text-center">
-        <div class="text-4xl mb-2">📊</div>
-        <p class="text-sm">No hay datos disponibles para mostrar</p>
+{#each [data] as currentData}
+  {#if Object.keys(currentData).length > 0}
+    <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-lg">
+      <h3 class="text-lg font-semibold text-slate-800 mb-4">{title}</h3>
+      <div class="relative" style="height: 300px;">
+        <canvas bind:this={chartElement}></canvas>
+      </div>
+      <div class="mt-4 text-center text-sm text-slate-500">
+        Total: {Object.values(currentData).reduce(
+          (sum: number, value: unknown) => sum + (value as number),
+          0,
+        )} días registrados
       </div>
     </div>
-  </div>
-{/if}
+  {:else}
+    <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-lg">
+      <h3 class="text-lg font-semibold text-slate-800 mb-4">{title}</h3>
+      <div class="flex items-center justify-center h-64 text-slate-400">
+        <div class="text-center">
+          <div class="text-4xl mb-2">📊</div>
+          <p class="text-sm">No hay datos disponibles para mostrar</p>
+        </div>
+      </div>
+    </div>
+  {/if}
+{/each}
 
 <style>
   canvas {

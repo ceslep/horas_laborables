@@ -204,17 +204,23 @@
   const daysInMonth = $derived(getDaysInMonth(month));
   const startDay = $derived(getStartDay(month));
 
-  function handleSelect(day: number, category: string) {
+function handleSelect(day: number, category: string) {
+    console.log("DEBUG: handleSelect called", { day, category, currentData: $state.snapshot(hoursData) });
     if (category === "") {
       delete hoursData[day];
     } else {
       hoursData[day] = category;
     }
+    console.log("DEBUG: After update, hoursData:", $state.snapshot(hoursData));
     triggerAutoSave();
   }
 
-  function triggerAutoSave() {
-    if (!email || !teacherName || !month) return;
+function triggerAutoSave() {
+    console.log("DEBUG: triggerAutoSave called", { email, teacherName, month, hoursData: $state.snapshot(hoursData) });
+    if (!email || !teacherName || !month) {
+      console.log("DEBUG: Missing required fields, not saving");
+      return;
+    }
 
     saveStatus = "saving";
     notificationConfig = {
@@ -226,6 +232,7 @@
 
     saveTimeout = setTimeout(async () => {
       try {
+        console.log("DEBUG: Starting save process");
         const daysArray: string[] = [];
         for (let day = 1; day <= 31; day++) {
           daysArray.push(hoursData[day] || "");
@@ -240,6 +247,7 @@
         });
 
         const values = [timestamp, email, teacherName, month, ...daysArray];
+        console.log("DEBUG: Values to save:", values);
 
         if (values.length !== 35) {
           throw new Error(
@@ -247,10 +255,12 @@
           );
         }
 
+        console.log("DEBUG: Calling sheetsService.appendRow");
         const result = await sheetsService.appendRow(
           values,
           existingRecordIndex,
         );
+        console.log("DEBUG: Save result:", result);
 
         if (result.success) {
           saveStatus = "saved";
@@ -268,6 +278,7 @@
             }
           });
           backendData = savedCategoryCount;
+          console.log("DEBUG: Updated backendData:", $state.snapshot(backendData));
 
           if (!result.updated && result.rowIndex) {
             existingRecordIndex = result.rowIndex;
@@ -276,6 +287,7 @@
             if (saveStatus === "saved") saveStatus = "idle";
           }, 3000);
         } else {
+          console.log("DEBUG: Save failed:", result);
           saveStatus = "error";
           notificationConfig = {
             show: true,
@@ -299,7 +311,7 @@
   const totalDays = $derived(daysInMonth || 30);
   const progress = $derived((completedDays / totalDays) * 100);
 
-  $effect(() => {
+$effect(() => {
     if (teacherName && month) {
       loadExistingRecords();
     } else {
@@ -308,17 +320,19 @@
     }
   });
 
-  async function loadExistingRecords() {
+async function loadExistingRecords() {
     isLoadingData = true;
     existingRecordIndex = null;
     backendData = {};
     try {
-      const result = await sheetsService.getRows();
+const result = await sheetsService.getRows();
       if (result.success && result.records) {
-        const existingRecord = result.records.find((record) => {
+const existingRecord = result.records.find((record) => {
+          const recordTeacher = record.values[2]?.trim();
+          const recordMonth = record.values[3]?.trim();
           return (
-            record.values[2]?.trim() === teacherName.trim() &&
-            record.values[3]?.trim() === month.trim()
+            recordTeacher === teacherName.trim() &&
+            recordMonth === month.trim()
           );
         });
 
@@ -331,16 +345,15 @@
           }
           hoursData = loadedData;
 
-          const backendCategoryCount: Record<string, number> = {};
-          for (let i = 1; i <= 31; i++) {
-            const val = existingRecord.values[i + 3];
-            if (val) {
-              backendCategoryCount[val] = (backendCategoryCount[val] || 0) + 1;
+          const backendCategoryCountCalculated: Record<string, number> = {};
+          Object.entries(loadedData).forEach(([day, categoryId]) => {
+            if (categoryId) {
+              backendCategoryCountCalculated[categoryId] = (backendCategoryCountCalculated[categoryId] || 0) + 1;
             }
-          }
-          backendData = backendCategoryCount;
+          });
+          backendData = backendCategoryCountCalculated;
         } else {
-          const monthIndex = months.indexOf(month);
+          console.log("No existing record found, auto-filling data");          const monthIndex = months.indexOf(month);
           const autoFilledData: Record<number, string> = {};
           if (monthIndex !== -1) {
             const daysInMonthCount = new Date(
@@ -369,7 +382,8 @@
               }
             });
           }
-          hoursData = autoFilledData;
+hoursData = autoFilledData;
+          console.log("Auto-filled hoursData:", autoFilledData);
         }
       }
     } catch (error) {
@@ -394,21 +408,7 @@
   const weekdays = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
   // ✅ CORRECCIÓN CLAVE: uso correcto de $derived.by
-  const pieChartData = $derived.by(() => {
-    // Prioridad: usar backendData si tiene datos
-    if (Object.keys(backendData).length > 0) {
-      return backendData;
-    }
 
-    // Si no, usar el estado local actual
-    const categoryCount: Record<string, number> = {};
-    for (const [day, categoryId] of Object.entries(hoursData)) {
-      if (categoryId) {
-        categoryCount[categoryId] = (categoryCount[categoryId] || 0) + 1;
-      }
-    }
-    return categoryCount;
-  });
 </script>
 
 <div class="max-w-[1600px] mx-auto p-3 sm:p-4 md:p-8" in:fade>
@@ -592,12 +592,15 @@
                   />
                 </svg>
               </div>
-              <select
+<select
                 id="month"
                 bind:value={month}
-                class="w-full bg-white border border-slate-300 rounded-2xl pl-11 pr-10 py-3 text-slate-900 focus:outline-none focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 transition-all duration-300 appearance-none cursor-pointer shadow-sm hover:border-slate-400"
+                disabled={!email || !teacherName}
+                class="w-full bg-white border border-slate-300 rounded-2xl pl-11 pr-10 py-3 text-slate-900 focus:outline-none focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 transition-all duration-300 appearance-none cursor-pointer shadow-sm hover:border-slate-400 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
               >
-                <option value="" disabled selected>Seleccionar mes</option>
+                <option value="" disabled selected>
+                  {!email || !teacherName ? "Completa email y docente primero" : "Seleccionar mes"}
+                </option>
                 {#each months as m}
                   <option value={m}>{m}</option>
                 {/each}
@@ -630,7 +633,7 @@
             </h3>
             <!-- ✅ CORRECCIÓN: sin paréntesis -->
             <PieChart
-              data={pieChartData}
+              data={backendData}
               {categories}
               title={teacherName && month
                 ? `${month} - ${teacherName}`
