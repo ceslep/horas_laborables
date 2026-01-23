@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import Chart from 'chart.js/auto';
+  import { onMount, onDestroy } from "svelte";
+  import Chart from "chart.js/auto";
 
   interface Category {
     id: string;
@@ -15,7 +15,7 @@
 
   const data = props.data ?? {};
   const categories = props.categories ?? [];
-  const title = props.title ?? '';
+  const title = props.title ?? "";
 
   // ✅ Referencia al canvas: no reactivo → usar $state.raw
   let chartElement = $state.raw<HTMLCanvasElement | undefined>(undefined);
@@ -24,28 +24,28 @@
   // Mapeo de colores Tailwind a hex
   function getTailwindColor(colorClass: string): string {
     const colorMap: Record<string, string> = {
-      'bg-blue-500': '#3b82f6',
-      'bg-green-500': '#10b981',
-      'bg-purple-500': '#a855f7',
-      'bg-emerald-600': '#059669',
-      'bg-cyan-600': '#0891b2',
-      'bg-rose-500': '#f43f5e',
-      'bg-stone-500': '#78716c',
-      'bg-slate-600': '#475569',
-      'bg-red-500': '#ef4444',
-      'bg-teal-500': '#14b8a6',
-      'bg-amber-500': '#f59e0b',
-      'bg-pink-500': '#ec4899',
-      'bg-violet-500': '#8b5cf6',
-      'bg-orange-500': '#f97316',
-      'bg-yellow-500': '#eab308',
-      'bg-indigo-600': '#4f46e5',
-      'bg-sky-500': '#0ea5e9',
-      'bg-red-700': '#b91c1c',
-      'bg-orange-700': '#c2410c',
-      'bg-slate-400': '#94a3b8',
+      "bg-blue-500": "#3b82f6",
+      "bg-green-500": "#10b981",
+      "bg-purple-500": "#a855f7",
+      "bg-emerald-600": "#059669",
+      "bg-cyan-600": "#0891b2",
+      "bg-rose-500": "#f43f5e",
+      "bg-stone-500": "#78716c",
+      "bg-slate-600": "#475569",
+      "bg-red-500": "#ef4444",
+      "bg-teal-500": "#14b8a6",
+      "bg-amber-500": "#f59e0b",
+      "bg-pink-500": "#ec4899",
+      "bg-violet-500": "#8b5cf6",
+      "bg-orange-500": "#f97316",
+      "bg-yellow-500": "#eab308",
+      "bg-indigo-600": "#4f46e5",
+      "bg-sky-500": "#0ea5e9",
+      "bg-red-700": "#b91c1c",
+      "bg-orange-700": "#c2410c",
+      "bg-slate-400": "#94a3b8",
     };
-    return colorMap[colorClass] || '#6b7280';
+    return colorMap[colorClass] || "#6b7280";
   }
 
   function createChart() {
@@ -59,7 +59,7 @@
     const values = Object.values(data);
     const colors = Object.keys(data).map((key) => {
       const category = categories.find((cat: Category) => cat.id === key);
-      return category ? getTailwindColor(category.color) : '#6b7280';
+      return category ? getTailwindColor(category.color) : "#6b7280";
     });
 
     if (chartInstance) {
@@ -68,14 +68,14 @@
 
     // ✅ ¡Sintaxis CORRECTA para Chart.js!
     chartInstance = new Chart(chartElement, {
-      type: 'pie',
-       {
+      type: "pie",
+      data: {
         labels,
         datasets: [
           {
-             values,
+            values,
             backgroundColor: colors,
-            borderColor: '#ffffff',
+            borderColor: "#ffffff",
             borderWidth: 2,
             hoverOffset: 4,
           },
@@ -86,7 +86,7 @@
         maintainAspectRatio: false,
         plugins: {
           legend: {
-            position: 'bottom',
+            position: "bottom",
             labels: {
               padding: 15,
               font: {
@@ -97,14 +97,14 @@
           tooltip: {
             callbacks: {
               label: function (context: any) {
-                const label = context.label || '';
+                const label = context.label || "";
                 const value = context.parsed || 0;
                 const total = context.dataset.data.reduce(
                   (sum: number, val: number) => sum + val,
                   0,
                 );
                 const percentage =
-                  total > 0 ? ((value / total) * 100).toFixed(1) : '0';
+                  total > 0 ? ((value / total) * 100).toFixed(1) : "0";
                 return `${label}: ${value} días (${percentage}%)`;
               },
             },
