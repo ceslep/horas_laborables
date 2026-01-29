@@ -1,52 +1,48 @@
 <script lang="ts">
+  import { API_CONFIG } from './constants.js';
+  
   let { value = $bindable(""), id = "" } = $props();
 
-  const teachers = [
-    "AIDA MILENA RIVERA",
-    "ANA MILENA FERNÁNDEZ BOLAÑOS",
-    "ANA SOFIA CARDENAS PETUMA",
-    "BLANCA NELLY MARÍN GIRALDO",
-    "CARLOS ALBERTO AGUIRRE GONZÁLEZ",
-    "CARLOS ARMANDO RÍOS ÁLVAREZ",
-    "CARLOS ARTURO CUARTAS RAMIREZ",
-    "CESAR LEANDRO PATIÑO VELEZ",
-    "DANIEL QUICENO RIVERA",
-    "DANNY DANIEL QUINTERO GIRALDO",
-    "DELCID DE JESÚS BUENO ARANDIA",
-    "DERLY JOANNA PUERTAS",
-    "DIANA LISBETH VÁSQUEZ LONDOÑO",
-    "DIANA MARCELA ROMERO GAMBOA",
-    "ESTEBAN FERNANDO JARAMILLO MUÑOZ",
-    "FANNY ELENA MENA R",
-    "GERMAN ALONSO CASTRILLÓN MARTÍNEZ",
-    "GLORIA LILIANA QUINTERO OROZCO",
-    "ILDORY JARAMILLO",
-    "ISABEL CRISTINA GOMEZ MONTOYA",
-    "JAVIER DE JESÚS AGUDELO CARVAJAL",
-    "JESÚS ALBERTO MEJÍA RÍOS",
-    "JHON JAIRO VÉLEZ TEJADA",
-    "JOHN EDWIN ARBOLEDA ACEVEDO",
-    "JON JAMES VASCO RODRÍGUEZ",
-    "JOSE FERNANDO CARDONA HENAO",
-    "LEON FERNEY CARO ARDILA",
-    "MARÍA DEL CARMEN SANTA",
-    "MARIA ELIZABETH GUERRERO R",
-    "MARTA LIDA CASTAÑO OSORIO",
-    "NELSON LONDOÑO SOTO",
-    "ONEIDA JARAMILLO OCAMPO",
-    "PABLO REINOSO HENAO",
-  ];
+  let teachers = $state([]);
+  let loading = $state(true);
+  let error = $state<string | null>(null);
+
+  async function fetchTeachers() {
+    try {
+      loading = true;
+      error = null;
+      const response = await fetch(API_CONFIG.profesURL);
+      if (!response.ok) {
+        throw new Error(`Error fetching teachers: ${response.status}`);
+      }
+      teachers = await response.json();
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Failed to fetch teachers:', err);
+    } finally {
+      loading = false;
+    }
+  }
+
+  fetchTeachers();
 </script>
 
 <select
   {id}
   bind:value
   class="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all appearance-none cursor-pointer"
+  disabled={loading}
 >
-  <option value="" disabled selected>Seleccione un docente...</option>
-  {#each teachers as teacher}
-    <option value={teacher}>{teacher}</option>
-  {/each}
+  <option value="" disabled selected>
+    {loading ? 'Cargando docentes...' : 'Seleccione un docente...'}
+  </option>
+  {#if error}
+    <option value="" disabled>Error: {error}</option>
+  {:else}
+    {#each teachers as teacher}
+      <option value={teacher}>{teacher}</option>
+    {/each}
+  {/if}
 </select>
 
 <style>

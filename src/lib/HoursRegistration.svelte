@@ -187,7 +187,10 @@
   ];
 
   const INSTITUTION_NAME = "INSTITUTO GUÁTICA";
-  const currentYear = 2026;
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth(); // 0-11
+  const currentDay = currentDate.getDate();
 
   function getDaysInMonth(monthName: string) {
     const monthIndex = months.indexOf(monthName);
@@ -201,11 +204,59 @@
     return (new Date(currentYear, monthIndex, 1).getDay() + 6) % 7;
   }
 
+  function isValidMonthToSave(selectedMonth: string): { valid: boolean; message: string } {
+    const selectedMonthIndex = months.indexOf(selectedMonth);
+    
+    if (selectedMonthIndex === -1) {
+      return { valid: false, message: "Mes inválido" };
+    }
+
+    // Current month - always valid
+    if (selectedMonthIndex === currentMonth) {
+      return { valid: true, message: "" };
+    }
+
+    // Previous month - valid only in first 15 days of current month
+    if (selectedMonthIndex === currentMonth - 1) {
+      if (currentDay <= 15) {
+        return { valid: true, message: "" };
+      } else {
+        return { valid: false, message: "Solo se puede guardar el mes anterior hasta el día 15 del mes actual" };
+      }
+    }
+
+    // Handle year boundary: January (0) to December (11) - previous month
+    if (currentMonth === 0 && selectedMonthIndex === 11) {
+      if (currentDay <= 15) {
+        return { valid: true, message: "" };
+      } else {
+        return { valid: false, message: "Solo se puede guardar el mes anterior hasta el día 15 del mes actual" };
+      }
+    }
+
+    // Future months - not valid
+    return { valid: false, message: "No se puede guardar meses futuros" };
+  }
+
   const daysInMonth = $derived(getDaysInMonth(month));
   const startDay = $derived(getStartDay(month));
 
 function handleSelect(day: number, category: string) {
     console.log("DEBUG: handleSelect called", { day, category, currentData: $state.snapshot(hoursData) });
+    
+    // Validar que el mes sea permitido antes de permitir selección
+    const monthValidation = isValidMonthToSave(month);
+    if (!monthValidation.valid) {
+      saveStatus = "error";
+      notificationConfig = {
+        show: true,
+        message: `❌ ${monthValidation.message}`,
+        type: "error",
+      };
+      console.log("DEBUG: Month validation failed in handleSelect:", monthValidation.message);
+      return;
+    }
+    
     if (category === "") {
       delete hoursData[day];
     } else {
@@ -219,6 +270,19 @@ function triggerAutoSave() {
     console.log("DEBUG: triggerAutoSave called", { email, teacherName, month, hoursData: $state.snapshot(hoursData) });
     if (!email || !teacherName || !month) {
       console.log("DEBUG: Missing required fields, not saving");
+      return;
+    }
+
+    // Validar que el mes sea permitido para guardar
+    const monthValidation = isValidMonthToSave(month);
+    if (!monthValidation.valid) {
+      saveStatus = "error";
+      notificationConfig = {
+        show: true,
+        message: `❌ ${monthValidation.message}`,
+        type: "error",
+      };
+      console.log("DEBUG: Month validation failed:", monthValidation.message);
       return;
     }
 
