@@ -159,6 +159,10 @@
         }
     });
 
+    function normalizeString(str: string): string {
+        return str.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    }
+
     function processStats(data: any[]) {
         // Data structure: [Timestamp, Email, Docente, Mes, ...Days]
         // Usually row 0 is header. Assuming row[2] is teacher, row[3] is month.
@@ -172,22 +176,26 @@
                 row[3] !== "MES",
         );
 
-        // Extract all unique teachers
-        const uniqueTeachers = new Set<string>();
+        // Extract all unique teachers (normalize to handle accent variations)
+        const teacherMap = new Map<string, string>();
         cleanData.forEach((row) => {
             if (row[2]) {
-                uniqueTeachers.add(row[2]);
+                const normalized = normalizeString(row[2]);
+                if (!teacherMap.has(normalized)) {
+                    teacherMap.set(normalized, row[2].trim());
+                }
             }
         });
-        allTeachers = Array.from(uniqueTeachers).sort();
+        allTeachers = Array.from(teacherMap.values()).sort((a, b) => a.localeCompare(b, 'es'));
 
         if (selectedTeacherForStats) {
-            cleanData = cleanData.filter((row) => row[2] === selectedTeacherForStats);
+            const normalizedSelected = normalizeString(selectedTeacherForStats);
+            cleanData = cleanData.filter((row) => row[2] && normalizeString(row[2]) === normalizedSelected);
         }
 
         // Filter by selected month if any
         if (selectedMonthForStats) {
-            cleanData = cleanData.filter((row) => row[3] === selectedMonthForStats);
+            cleanData = cleanData.filter((row) => row[3]?.trim() === selectedMonthForStats.trim());
         }
 
         totalRecords = cleanData.length;
@@ -260,12 +268,13 @@ function selectMonthForStats(month: string) {
 
     function showMonthCalendar(month: string) {
         const teacher = selectedTeacherForStats;
+        const normalizedTeacher = normalizeString(teacher);
         
         // Find the record for this teacher and month
         const record = rows.find(row => {
             const rowTeacher = row[2]?.trim();
             const rowMonth = row[3]?.trim();
-            return rowTeacher === teacher && rowMonth === month;
+            return normalizeString(rowTeacher) === normalizedTeacher && rowMonth === month;
         });
 
         if (!record) {

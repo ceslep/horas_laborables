@@ -389,13 +389,14 @@ async function loadExistingRecords() {
     existingRecordIndex = null;
     backendData = {};
     try {
-const result = await sheetsService.getRows();
+      const result = await sheetsService.getRows();
       if (result.success && result.records) {
-const existingRecord = result.records.find((record) => {
+        const normalizedTeacherName = normalizeString(teacherName);
+        const existingRecord = result.records.find((record) => {
           const recordTeacher = record.values[2]?.trim();
           const recordMonth = record.values[3]?.trim();
           return (
-            recordTeacher === teacherName.trim() &&
+            normalizeString(recordTeacher) === normalizedTeacherName &&
             recordMonth === month.trim()
           );
         });
@@ -556,6 +557,10 @@ function handleOpenStats() {
   }
 
   const weekdays = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+  function normalizeString(str: string): string {
+    return str.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
 
   // ✅ CORRECCIÓN CLAVE: uso correcto de $derived.by
 

@@ -30,11 +30,16 @@ npm run check       # Run svelte-check + TypeScript compiler
 
 ### Testing
 ```bash
-npm run test              # Run all tests (Vitest)
-npm run test -- date-validation.test.ts    # Run single test file
-npm run test -- --run        # Run tests once (not watch mode)
-npm run test -- "mes anterior" # Run tests matching pattern
+npm run test              # Run all tests in watch mode (Vitest)
+npm run test -- --run     # Run tests once (not watch mode)
+npm run test date-validation.test.ts    # Run single test file
+npm run test "mes anterior"  # Run tests matching pattern
 ```
+- Test files: `src/tests/*.test.ts`
+- Use `describe`, `it`, `expect` from vitest
+- Use `beforeEach` for setup
+- Mock external dependencies (Google Sheets service, etc.)
+- Test business logic in isolation from UI
 
 ## Code Style Guidelines
 
@@ -54,25 +59,61 @@ npm run test -- "mes anterior" # Run tests matching pattern
 - Always define return types for functions when not obvious
 - Use `Record<K, V>` for dictionary-like objects
 - Use `interface` for public APIs, `type` for unions/intersections
+- Use `any[]` for loosely typed arrays (e.g., categories array in CalendarCell)
 - Enable `strict: true` equivalent via svelte-check
 
 ### Svelte 5 Patterns
 
+#### Props Definition (use Props interface)
 ```svelte
 <script lang="ts">
-  // Use $state for reactive state (not let + $:)
-  let email = $state("");
+  interface Props {
+    day: number;
+    value: string;
+    onSelect: (val: string) => void;
+    categories: any[];
+    isCurrentMonth?: boolean;
+    weekday?: string;
+  }
+
+  let {
+    day,
+    value,
+    onSelect,
+    categories,
+    isCurrentMonth = true,
+    weekday = "",
+  }: Props = $props();
+</script>
+```
+
+#### State and Derived
+```svelte
+<script lang="ts">
+  // Reactive state
+  let showMenu = $state(false);
   
-  // Use $derived for computed values
-  const daysInMonth = $derived(getDaysInMonth(month));
+  // State with type annotation
+  let buttonRef = $state<HTMLButtonElement | null>(null);
   
-  // Use $effect for side effects
+  // Typed state for objects
+  let menuPosition = $state<{
+    top: number;
+    left: number | "auto";
+    right: number | "auto";
+  }>({ top: 0, left: 0, right: "auto" });
+
+  // Derived computed value
+  const selectedCategory = $derived(categories.find((c) => c.id === value));
+</script>
+```
+
+#### Effect for Side Effects
+```svelte
+<script lang="ts">
   $effect(() => {
     if (teacherName && month) loadExistingRecords();
   });
-  
-  // Use $props for component props
-  let { title, onSelect }: { title: string; onSelect: (val: string) => void } = $props();
 </script>
 ```
 
@@ -81,32 +122,35 @@ npm run test -- "mes anterior" # Run tests matching pattern
 - Use explicit relative imports (e.g., `./CalendarCell.svelte`, not `@/components/...`)
 - Group by type with blank lines between groups
 
+### Component Structure
+- Place interface Props at the top of `<script>` block
+- Use `$state` for all reactive variables
+- Use `$derived` for computed values
+- Use `$effect` for side effects (data loading, subscriptions)
+- Keep template logic minimal; extract to functions
+
 ### Error Handling
 - Use try/catch with meaningful error messages
-- Display errors to users via notification system (SweetAlert2 or custom notification)
+- Display errors to users via SweetAlert2 or custom notification
 - Log errors to console with context for debugging
+- Handle server errors with user-friendly messages in Spanish
 
 ### Tailwind CSS
 - Use utility classes directly in templates (v4 style)
 - Use semantic color names (slate, blue, emerald, etc.)
 - Responsive design: use `sm:`, `md:`, `lg:`, `xl:` prefixes
-
-### Testing (Vitest)
-- Test files: `src/tests/*.test.ts`
-- Use `describe`, `it`, `expect` from vitest
-- Use `beforeEach` for setup
-- Mock external dependencies (Google Sheets service, etc.)
-- Test business logic in isolation from UI
+- Common patterns: `flex`, `grid`, `p-4`, `text-sm`, `bg-white`, `border-slate-200`
 
 ### File Organization
 ```
 src/
 ├── lib/
 │   ├── components/     # Reusable Svelte components
-│   ├── services/      # API services
+│   ├── services/      # API services (.ts and .svelte.ts files)
 │   ├── constants.ts   # Configuration constants
-│   └── utils.ts       # Utility functions
-├── tests/             # Test files
+│   ├── utils.ts       # Utility functions
+│   └── festivos.ts    # Holiday data
+├── tests/             # Test files (*.test.ts)
 ├── assets/            # Static assets
 ├── App.svelte         # Root component
 └── main.ts            # Entry point
@@ -132,3 +176,7 @@ src/
 - Base path for GitHub Pages: `/horas_laborables/`
 - Backend: PHP scripts at external URL (configured in `src/lib/constants.ts`)
 - Timezone: America/Bogota for all date operations
+
+## No Cursor/Copilot Rules Found
+
+This project does not have custom Cursor rules (`.cursor/rules/`) or Copilot instructions (`.github/copilot-instructions.md`).

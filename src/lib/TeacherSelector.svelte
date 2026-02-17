@@ -3,9 +3,13 @@
   
   let { value = $bindable(""), id = "" } = $props();
 
-  let teachers = $state([]);
+  let teachers = $state<string[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
+
+  function normalizeString(str: string): string {
+    return str.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
 
   async function fetchTeachers() {
     try {
@@ -15,7 +19,17 @@
       if (!response.ok) {
         throw new Error(`Error fetching teachers: ${response.status}`);
       }
-      teachers = await response.json();
+      const data = await response.json();
+      
+      // Deduplicate teachers by normalized name
+      const teacherMap = new Map<string, string>();
+      data.forEach((teacher: string) => {
+        const normalized = normalizeString(teacher);
+        if (!teacherMap.has(normalized)) {
+          teacherMap.set(normalized, teacher.trim());
+        }
+      });
+      teachers = Array.from(teacherMap.values()).sort((a, b) => a.localeCompare(b, 'es'));
     } catch (err) {
       error = err instanceof Error ? err.message : 'Unknown error';
       console.error('Failed to fetch teachers:', err);
