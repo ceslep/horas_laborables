@@ -27,6 +27,7 @@ let showAdminStats = $state(false);
     type: "saving" as "saving" | "saved" | "error" | "info",
   });
   let backendData = $state<Record<string, number>>({});
+  let passwordValidatedMonths = $state<Record<string, boolean>>({});
 
   const months = [
     "Enero",
@@ -204,38 +205,107 @@ let showAdminStats = $state(false);
     return (new Date(currentYear, monthIndex, 1).getDay() + 6) % 7;
   }
 
-  function isValidMonthToSave(selectedMonth: string): { valid: boolean; message: string } {
+  function isValidMonthToSave(selectedMonth: string): { valid: boolean; message: string; needsPassword: boolean } {
     const selectedMonthIndex = months.indexOf(selectedMonth);
     
     if (selectedMonthIndex === -1) {
-      return { valid: false, message: "Mes inválido" };
+      return { valid: false, message: "Mes inválido", needsPassword: false };
+    }
+
+    // Future months - not valid
+    if (selectedMonthIndex > currentMonth) {
+      return { valid: false, message: "No se puede guardar meses futuros", needsPassword: false };
     }
 
     // Current month - always valid
     if (selectedMonthIndex === currentMonth) {
-      return { valid: true, message: "" };
+      return { valid: true, message: "", needsPassword: false };
     }
 
     // Previous month - valid only in first 15 days of current month
     if (selectedMonthIndex === currentMonth - 1) {
       if (currentDay <= 15) {
-        return { valid: true, message: "" };
+        return { valid: true, message: "", needsPassword: false };
       } else {
-        return { valid: false, message: "Solo se puede guardar el mes anterior hasta el día 15 del mes actual" };
+        return { valid: true, message: "", needsPassword: true };
       }
     }
 
     // Handle year boundary: January (0) to December (11) - previous month
     if (currentMonth === 0 && selectedMonthIndex === 11) {
       if (currentDay <= 15) {
-        return { valid: true, message: "" };
+        return { valid: true, message: "", needsPassword: false };
       } else {
-        return { valid: false, message: "Solo se puede guardar el mes anterior hasta el día 15 del mes actual" };
+        return { valid: true, message: "", needsPassword: true };
       }
     }
 
-    // Future months - not valid
-    return { valid: false, message: "No se puede guardar meses futuros" };
+    // Months older than previous month - require password
+    return { valid: true, message: "", needsPassword: true };
+  }
+
+  function generateExpectedPassword(monthName: string): string {
+    const monthIndex = months.indexOf(monthName);
+    const monthNum = (monthIndex + 1).toString().padStart(2, '0');
+    return `${currentDay}-${monthNum}`;
+  }
+
+  async function validatePasswordWithSwal(monthName: string): Promise<boolean> {
+    const expectedPassword = generateExpectedPassword(monthName);
+    
+    const inputId = `swal-password-${Date.now()}`;
+    
+    const { value: password } = await Swal.fire({
+      title: '🔒 Acceso Restringido',
+      html: `
+        <p class="text-sm text-slate-600 mb-4">
+          El mes "${monthName}" requiere autorización especial.<br>
+          Ingrese la contraseña proporcionada por el administrador.
+        </p>
+        <input 
+          type="password" 
+          id="${inputId}" 
+          class="swal2-input" 
+          placeholder=""
+          autocomplete="new-password"
+        >
+      `,
+      willOpen: () => {
+        document.querySelectorAll('input[id^="swal-password-"]').forEach((el) => {
+          (el as HTMLInputElement).value = '';
+        });
+      },
+      preConfirm: () => {
+        const input = document.getElementById(inputId) as HTMLInputElement;
+        return input?.value;
+      },
+      showCancelButton: true,
+      confirmButtonText: 'Validar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#2563eb',
+      allowOutsideClick: false,
+    });
+
+    if (password === expectedPassword) {
+      passwordValidatedMonths[monthName] = true;
+      await Swal.fire({
+        icon: 'success',
+        title: '✅ Acceso Concedido',
+        text: `Ha validado correctamente el mes de ${monthName}`,
+        confirmButtonColor: '#2563eb',
+        timer: 2000,
+        showConfirmButton: false,
+      });
+      return true;
+    } else if (password) {
+      await Swal.fire({
+        icon: 'error',
+        title: '❌ Contraseña Incorrecta',
+        text: 'La contraseña ingresada no es válida. Contacte al administrador.',
+        confirmButtonColor: '#2563eb',
+      });
+    }
+    return false;
   }
 
   const daysInMonth = $derived(getDaysInMonth(month));
@@ -244,7 +314,6 @@ let showAdminStats = $state(false);
 function handleSelect(day: number, category: string) {
     console.log("DEBUG: handleSelect called", { day, category, currentData: $state.snapshot(hoursData) });
     
-    // Validar que el mes sea permitido antes de permitir selección
     const monthValidation = isValidMonthToSave(month);
     if (!monthValidation.valid) {
       saveStatus = "error";
@@ -254,6 +323,21 @@ function handleSelect(day: number, category: string) {
         type: "error",
       };
       console.log("DEBUG: Month validation failed in handleSelect:", monthValidation.message);
+      return;
+    }
+    
+    if (monthValidation.needsPassword && !passwordValidatedMonths[month]) {
+      validatePasswordWithSwal(month).then((isValid) => {
+        if (isValid) {
+          if (category === "") {
+            delete hoursData[day];
+          } else {
+            hoursData[day] = category;
+          }
+          console.log("DEBUG: After password validation update, hoursData:", $state.snapshot(hoursData));
+          triggerAutoSave();
+        }
+      });
       return;
     }
     
@@ -283,6 +367,11 @@ function triggerAutoSave() {
         type: "error",
       };
       console.log("DEBUG: Month validation failed:", monthValidation.message);
+      return;
+    }
+
+    if (monthValidation.needsPassword && !passwordValidatedMonths[month]) {
+      console.log("DEBUG: Month requires password validation, not saving");
       return;
     }
 
