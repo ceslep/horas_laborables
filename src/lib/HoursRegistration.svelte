@@ -11,7 +11,7 @@ import AdminStats from "./AdminStats.svelte";
   import escudo from "../assets/eie.png";
   import { festivos } from "./festivos";
 
-  let email = $state("");
+  let email = $state(new URLSearchParams(window.location.search).get("email") || "");
   let teacherName = $state("");
   let month = $state("");
   let hoursData = $state<Record<number, string>>({});
