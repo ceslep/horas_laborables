@@ -11,8 +11,10 @@ import AdminStats from "./AdminStats.svelte";
   import escudo from "../assets/eie.png";
   import { festivos } from "./festivos";
 
-  let email = $state(new URLSearchParams(window.location.search).get("email") || "");
+  const urlParams = new URLSearchParams(window.location.search);
+  let email = $state(urlParams.get("email") || "");
   let teacherName = $state("");
+  const initialTeacher = urlParams.get("teacher") || "";
   let month = $state("");
   let hoursData = $state<Record<number, string>>({});
   let isSaving = $state(false);
@@ -807,7 +809,7 @@ function handleOpenStats() {
                   />
                 </svg>
               </div>
-              <TeacherSelector id="teacher" bind:value={teacherName} />
+              <TeacherSelector id="teacher" bind:value={teacherName} initialValue={initialTeacher} />
             </div>
           </div>
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { API_CONFIG } from './constants.js';
   
-  let { value = $bindable(""), id = "" } = $props();
+  let { value = $bindable(""), id = "", initialValue = "" } = $props();
 
   let teachers = $state<string[]>([]);
   let loading = $state(true);
@@ -30,6 +30,15 @@
         }
       });
       teachers = Array.from(teacherMap.values()).sort((a, b) => a.localeCompare(b, 'es'));
+
+      // Auto-select teacher from URL parameter
+      if (initialValue && !value) {
+        const normalizedInitial = normalizeString(initialValue);
+        const match = teachers.find(t => normalizeString(t) === normalizedInitial);
+        if (match) {
+          value = match;
+        }
+      }
     } catch (err) {
       error = err instanceof Error ? err.message : 'Unknown error';
       console.error('Failed to fetch teachers:', err);
